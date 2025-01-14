@@ -4,6 +4,10 @@ import static androidx.fragment.app.FragmentManager.TAG;
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
 
+import android.Manifest;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.util.Log;
 
 import org.junit.Assert;
@@ -11,6 +15,8 @@ import org.junit.Before;
 import org.junit.Rule;
 
 import java.io.File;
+import java.io.IOException;
+
 import mo.must.common.test.TestAssert;
 import mo.must.common.util.FileUtils;
 import mo.must.common.util.RobotiumUtils;
@@ -21,10 +27,6 @@ import androidx.test.uiautomator.UiSelector;
 
 import com.flauschcode.broccoli.util.SpinnerAutomatorUtils;
 import com.robotium.solo.Solo;
-
-
-
-
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class Test {
@@ -52,6 +54,16 @@ public class Test {
         RobotiumUtils.init(mSolo);
         SpinnerAutomatorUtils.init(uiDevice);
 
+/*        // 动态申请权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Context context = getInstrumentation().getTargetContext();
+            if (context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                getInstrumentation().getUiAutomation().executeShellCommand(
+                        "pm grant " + context.getPackageName() + " android.permission.WRITE_EXTERNAL_STORAGE"
+                );
+            }
+        }*/
+
         // 记录测试开始的日志
         Log.d(TAG, "Initialization complete. Starting the test.");
     }
@@ -63,12 +75,12 @@ public class Test {
         File uiHierarchyFile = SpinnerAutomatorUtils.dumpHierarchy();
         TestAssert.assertNotNull(uiHierarchyFile);
 
+//        // 读取xml文件内容
+//        Log.d(TAG, "Reading the hierarchy tree...");
+//        String xmlContent = FileUtils.readXmlFileToString(uiHierarchyFile);
+
         // 截取当前界面截图并保存
         captureScreenshot("step1_initial_screen");
-
-        // 读取xml文件内容
-        Log.d(TAG, "Reading the hierarchy tree...");
-//        String xmlContent = FileUtils.readXmlFileToString(uiHierarchyFile);
 
         // 查找目标控件（通过 content-desc="打开抽屉式导航栏"）
         try {
@@ -99,26 +111,49 @@ public class Test {
      * @param fileName 截图文件名（无扩展名）
      */
     private void captureScreenshot(String fileName) {
-        String screenshotDir = "/sdcard/Download/Screenshots/";
-        File dir = new File(screenshotDir);
-        if (!dir.exists()) {
-            if (dir.mkdirs()) {
-                Log.d(TAG, "Created directory: " + screenshotDir);
-            } else {
-                Log.e(TAG, "Failed to create directory: " + screenshotDir);
-                return;
-            }
+        // 获取外部存储的文件夹（可以用于保存截图等文件）
+        File externalDir = getInstrumentation().getTargetContext().getExternalFilesDir(null);
+        if (externalDir == null) {
+            Log.e(TAG, "无法访问外部存储目录");
+            return;
         }
 
-
-        // 截图文件路径
-        File screenshotFile = new File(screenshotDir, fileName + ".png");
-        boolean success = uiDevice.takeScreenshot(screenshotFile);
-
-        if (success) {
-            Log.d(TAG, "Screenshot saved on device: " + screenshotFile.getAbsolutePath());
+        // 创建 Screenshots 文件夹
+        File screenshotDir = new File(externalDir, "Screenshots");
+        if (!screenshotDir.exists()) {
+            if (screenshotDir.mkdirs()) {
+                Log.d(TAG, "成功创建截图目录: " + screenshotDir.getAbsolutePath());
+            } else {
+                Log.e(TAG, "无法创建截图目录: " + screenshotDir.getAbsolutePath());
+                return;
+            }
         } else {
-            Log.e(TAG, "Failed to capture screenshot: " + screenshotFile.getAbsolutePath());
+            Log.d(TAG, "截图目录已存在: " + screenshotDir.getAbsolutePath());
+        }
+
+        // 生成截图文件路径
+        File screenshotFile = new File(screenshotDir, fileName + ".png");
+
+        try {
+            // 检查是否可以写入目标文件
+            if (!screenshotFile.exists()) {
+                if (!screenshotFile.createNewFile()) {
+                    Log.e(TAG, "无法创建截图文件: " + screenshotFile.getAbsolutePath());
+                    return;
+                }
+            }
+
+            // 使用 UiDevice 截取屏幕并保存
+            boolean success = uiDevice.takeScreenshot(screenshotFile);
+            if (success) {
+                Log.d(TAG, "截图成功保存到: " + screenshotFile.getAbsolutePath());
+            } else {
+                Log.e(TAG, "截图失败: " + screenshotFile.getAbsolutePath());
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "保存截图时发生错误: " + e.getMessage(), e);
+        } catch (Exception e) {
+            Log.e(TAG, "未知错误: " + e.getMessage(), e);
         }
     }
 }
