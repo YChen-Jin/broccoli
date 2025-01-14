@@ -14,7 +14,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 
 import mo.must.common.test.TestAssert;
@@ -54,30 +56,14 @@ public class Test {
         RobotiumUtils.init(mSolo);
         SpinnerAutomatorUtils.init(uiDevice);
 
-/*        // 动态申请权限
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Context context = getInstrumentation().getTargetContext();
-            if (context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                getInstrumentation().getUiAutomation().executeShellCommand(
-                        "pm grant " + context.getPackageName() + " android.permission.WRITE_EXTERNAL_STORAGE"
-                );
-            }
-        }*/
-
         // 记录测试开始的日志
         Log.d(TAG, "Initialization complete. Starting the test.");
     }
 
     @org.junit.Test
     public void testWithXmlFile() {
-
-        // 使用 UI Automator 获取当前的UI层次结构并保存为xml文件，如果获取的xml文件为null，则断言测试失败
-        File uiHierarchyFile = SpinnerAutomatorUtils.dumpHierarchy();
-        TestAssert.assertNotNull(uiHierarchyFile);
-
-//        // 读取xml文件内容
-//        Log.d(TAG, "Reading the hierarchy tree...");
-//        String xmlContent = FileUtils.readXmlFileToString(uiHierarchyFile);
+        // 使用 UI Automator 获取当前的 UI 层次结构并保存为 XML 文件
+        saveCurrentUiHierarchy("step1_initial_hierarchy");
 
         // 截取当前界面截图并保存
         captureScreenshot("step1_initial_screen");
@@ -87,6 +73,9 @@ public class Test {
             Log.d(TAG, "Finding and clicking the target control with content-desc='打开抽屉式导航栏'...");
             uiDevice.findObject(new UiSelector().description("打开抽屉式导航栏")).click();
             captureScreenshot("step2_after_click_drawer");
+
+            // 保存点击后的 XML 层次结构
+            saveCurrentUiHierarchy("step2_after_click_drawer_hierarchy");
         } catch (Exception e) {
             Log.e(TAG, "Failed to click the control: " + e.getMessage());
             Assert.fail("Control click failed.");
@@ -98,12 +87,68 @@ public class Test {
 
         // 获取新界面的 UI 层次结构并保存为 XML 文件
         Log.d(TAG, "Dumping the new hierarchy tree...");
-        File newUiHierarchyFile = SpinnerAutomatorUtils.dumpHierarchy();
-        TestAssert.assertNotNull(newUiHierarchyFile);
+        saveCurrentUiHierarchy("step3_new_screen_hierarchy");
 
         // 截取新界面截图
         captureScreenshot("step3_new_screen");
     }
+
+
+
+    /**
+     * 保存当前的 UI 层次结构到外部存储的文件夹
+     *
+     * @param fileName 保存的文件名（无扩展名）
+     */
+    private void saveCurrentUiHierarchy(String fileName) {
+        // 使用 UI Automator 获取当前的 UI 层次结构
+        File uiHierarchyFile = SpinnerAutomatorUtils.dumpHierarchy();
+        if (uiHierarchyFile == null || !uiHierarchyFile.exists()) {
+            Log.e(TAG, "Failed to dump UI hierarchy.");
+            Assert.fail("Failed to dump UI hierarchy.");
+        }
+
+        // 读取 XML 文件内容
+        Log.d(TAG, "Reading the hierarchy tree...");
+        String xmlContent = FileUtils.readXmlFileToString(uiHierarchyFile);
+
+        // 保存到外部存储
+        saveXmlToExternalFile(xmlContent, fileName);
+    }
+
+    /**
+     * 保存 XML 内容到外部存储文件夹
+     *
+     * @param xmlContent 保存的 XML 内容
+     * @param fileName   保存的文件名（无扩展名）
+     */
+    private void saveXmlToExternalFile(String xmlContent, String fileName) {
+        // 获取外部存储的文件夹
+        File externalDir = getInstrumentation().getTargetContext().getExternalFilesDir(null);
+        if (externalDir == null) {
+            Log.e(TAG, "无法访问外部存储目录");
+            return;
+        }
+
+        // 创建 UI 层次结构文件夹
+        File uiHierarchyDir = new File(externalDir, "UI_Hierarchy");
+        if (!uiHierarchyDir.exists() && !uiHierarchyDir.mkdirs()) {
+            Log.e(TAG, "无法创建 UI 层次结构目录: " + uiHierarchyDir.getAbsolutePath());
+            return;
+        }
+
+        // 创建 XML 文件
+        File xmlFile = new File(uiHierarchyDir, fileName + ".xml");
+
+        // 写入 XML 内容
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(xmlFile))) {
+            writer.write(xmlContent);
+            Log.d(TAG, "UI 层次结构已成功保存到外部存储: " + xmlFile.getAbsolutePath());
+        } catch (IOException e) {
+            Log.e(TAG, "保存 XML 文件时出错: " + e.getMessage());
+        }
+    }
+
 
     /**
      * 截取屏幕截图并保存到指定文件名
